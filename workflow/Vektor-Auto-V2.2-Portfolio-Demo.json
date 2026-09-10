@@ -1,0 +1,4889 @@
+{
+  "name": "Vektor Auto V2.2 — AI Service Desk (Portfolio Demo)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Vektor Auto V2 — AI Service Desk\n\nФорма или Telegram → Gemini собирает заявку → проверка календаря → кнопки администратора → запись → напоминания → отчёт.\n\nПеред запуском: подключите Gemini и Google Calendar, добавьте колонки из `demo-data/leads-table-schema.csv`, затем выберите Error Workflow в настройках.",
+        "height": 430,
+        "width": 760
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "46d2140b-3047-419b-82f2-6e3e1db80b7b",
+      "name": "Overview"
+    },
+    {
+      "parameters": {
+        "formTitle": "Запись в Vektor Auto",
+        "formDescription": "Опишите автомобиль, проблему и удобное время. Администратор подтвердит запись.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Ваше имя",
+              "fieldName": "name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Телефон",
+              "fieldName": "phone",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Марка и модель автомобиля",
+              "fieldName": "car",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Опишите проблему",
+              "fieldType": "textarea",
+              "fieldName": "problem",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Желаемая дата",
+              "fieldType": "date",
+              "fieldName": "desired_date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Желаемое время",
+              "fieldName": "desired_time",
+              "placeholder": "Например, 16:30",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Отправить заявку",
+          "useWorkflowTimezone": true
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        112,
+        480
+      ],
+      "id": "3c8310a5-2463-473a-8fb7-f1dab4234dd2",
+      "name": "Capture Form",
+      "webhookId": "41e43ec4-5303-4979-a582-a81f118d9bc9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = String($json.phone || '').replace(/[^\\d+]/g, '');\nif (!/^\\+?\\d{10,15}$/.test(phone)) throw new Error('Некорректный телефон');\nconst form = {\n  name: String($json.name || '').trim(), phone, car: String($json.car || '').trim(),\n  problem: String($json.problem || '').trim(),\n  desired_time: [String($json.desired_date || '').trim(), String($json.desired_time || '').trim()].filter(Boolean).join(' '),\n};\nreturn [{ json: {\n  source: 'form', client_chat_id: '', received_at: new Date().toISOString(), form_data: form,\n  current_message: 'Новая заявка из формы: ' + JSON.stringify(form),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        480
+      ],
+      "id": "04714073-9426-4769-942c-cb76339412c1",
+      "name": "Normalize Form"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "phone",
+              "keyValue": "={{ $('Normalize Form').item.json.form_data.phone }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        480
+      ],
+      "id": "42afe8bc-d14d-42bc-8d40-c0fa1e3be19a",
+      "name": "Get Existing Form Lead",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Normalize Form').item.json;\nconst existing = $json && $json.id ? $json : {};\nreturn [{ json: { ...input, existing_state: existing } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        480
+      ],
+      "id": "436a9d48-06d4-4985-9626-0db50a6e8a11",
+      "name": "Prepare Form Context"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Верни ТОЛЬКО один валидный JSON-объект без markdown и пояснений.\n\nТы ИИ-администратор вымышленного автосервиса Vektor Auto в Якутске.\nТекущее время в Якутске: {{ $now.setZone('Asia/Yakutsk').toISO() }}\nУже сохранённые данные: {{ JSON.stringify($json.existing_state || {}) }}\nНовое сообщение: {{ $json.current_message }}\n\nСхема:\n{\"reply\":\"\",\"name\":\"\",\"phone\":\"\",\"car\":\"\",\"problem\":\"\",\"service\":\"\",\"urgency\":\"normal\",\"duration_minutes\":60,\"desired_time\":\"\",\"ready_for_review\":false,\"needs_human\":false,\"ai_summary\":\"\"}\n\nПравила:\n- Извлекай сведения из нового сообщения и сохраняй уже известные сведения. Не заменяй известное значение пустой строкой.\n- Отвечай только по-русски. Не используй английские слова и названия категорий.\n- Обязательные поля: имя, телефон, автомобиль, проблема, точные дата и время.\n- Телефон должен содержать 10–15 цифр. Российский номер нормализуй к формату +7XXXXXXXXXX.\n- desired_time верни в ISO-8601 с +09:00. Относительные даты считай от указанного текущего времени Якутска.\n- Вид услуги определи самостоятельно по проблеме. Бампер, вмятины, царапины, крыло, дверь или покраска — «Кузовной ремонт».\n- Не предлагай дополнительные услуги и не спрашивай про покраску, диагностику или замену, если клиент уже описал желаемую работу.\n- Не говори, что время свободно, подходит, принято или подтверждено: календарь проверяется после тебя, запись подтверждает администратор.\n- Не ставь диагноз и не обещай окончательную цену.\n- Тормоза, рулевое управление, дым, запах топлива или перегрев: urgency=critical и needs_human=true.\n- reply — короткая русская фраза, максимум один вопрос только об отсутствующем обязательном поле.\n- ready_for_review=true только при наличии всех обязательных полей.\n- ai_summary — короткая русская выжимка для администратора.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1088,
+        480
+      ],
+      "id": "235874db-c83c-4281-bc74-d95c937a27f7",
+      "name": "AI Form Intake",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Prepare Form Context').item.json;\nconst existing = context.existing_state || {};\nconst form = context.form_data || {};\nconst candidate = $json.output ?? $json.text ?? '';\nlet parsed = {};\nlet aiOk = true;\ntry {\n  if (candidate && typeof candidate === 'object') {\n    parsed = candidate;\n  } else {\n    let raw = String(candidate).replace(/\\x60\\x60\\x60json/gi, '').replace(/\\x60\\x60\\x60/g, '').trim();\n    const start = raw.indexOf('{'), end = raw.lastIndexOf('}');\n    if (start >= 0 && end > start) raw = raw.slice(start, end + 1);\n    parsed = JSON.parse(raw);\n    if (typeof parsed === 'string') parsed = JSON.parse(parsed);\n  }\n  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('AI output is not an object');\n} catch { aiOk = false; parsed = {}; }\n\nconst present = (value) => value !== undefined && value !== null && String(value).trim() !== '';\nconst value = (key, fallback = '') => String([parsed[key], existing[key], form[key], fallback].find(present) ?? '').trim();\nconst name = value('name');\nconst car = value('car');\nconst problem = value('problem');\nlet phoneDigits = value('phone').replace(/\\D/g, '');\nif (phoneDigits.length === 11 && phoneDigits.startsWith('8')) phoneDigits = '7' + phoneDigits.slice(1);\nconst phone = phoneDigits ? '+' + phoneDigits : '';\nconst phoneValid = /^\\+\\d{10,15}$/.test(phone);\nconst danger = /(тормоз|рул|дым|топлив|бензин|перегрев|кипит|не управ)/i.test(problem);\nconst desired = value('desired_time');\nconst desiredDate = desired ? new Date(desired) : null;\nconst validDate = Boolean(desiredDate && !Number.isNaN(desiredDate.getTime()) && desiredDate.getTime() > Date.now());\nconst complete = Boolean(name && phoneValid && car && problem && validDate);\nconst needsHuman = !aiOk || danger || Boolean(parsed.needs_human);\nconst ready = aiOk && complete && !needsHuman;\n\nconst service = /бампер|кузов|вмят|царап|крыл|двер|покрас|стекл/i.test(problem) ? 'Кузовной ремонт'\n  : /масл|фильтр|техобслуж|\\bто\\b/i.test(problem) ? 'Техническое обслуживание'\n  : /шин|колес|резин/i.test(problem) ? 'Шиномонтаж'\n  : /аккум|электр|стартер|генератор/i.test(problem) ? 'Автоэлектрика'\n  : 'Диагностика';\n\nlet reply = 'Данные получил. Передаю заявку администратору для проверки времени.';\nif (!aiOk) reply = 'Не смог обработать сообщение автоматически. Я сохранил заявку и передал её администратору.';\nelse if (danger) reply = 'Ситуация может быть небезопасной. Не продолжайте движение, если управление или торможение нарушено. Я передал заявку администратору.';\nelse if (!name) reply = 'Как вас зовут?';\nelse if (!phoneValid) reply = 'Укажите номер телефона полностью: 10–15 цифр, например +79990000000.';\nelse if (!car) reply = 'Укажите марку, модель и год автомобиля.';\nelse if (!problem) reply = 'Коротко опишите проблему или нужную работу.';\nelse if (!validDate) reply = 'Укажите желаемые дату и время визита.';\n\nconst requestedDuration = Number(parsed.duration_minutes || existing.duration_minutes || 60);\nreturn [{ json: {\n  name, phone, car, problem, desired_time: desired,\n  status: ready ? 'Ожидает подтверждения' : (needsHuman ? 'Нужен человек' : 'Сбор данных'),\n  source: context.source, client_chat_id: String(context.client_chat_id || existing.client_chat_id || ''),\n  service, urgency: danger ? 'critical' : value('urgency', 'normal'),\n  ai_summary: aiOk ? value('ai_summary', problem) : 'ИИ недоступен — требуется ручная обработка.',\n  proposed_start: value('proposed_start'), proposed_end: value('proposed_end'), alternatives_json: value('alternatives_json', '[]'),\n  first_response_at: value('first_response_at', new Date().toISOString()), last_contact_at: new Date().toISOString(),\n  appointment_event_id: value('appointment_event_id'), booked_at: value('booked_at'), failure_reason: aiOk ? '' : 'AI_PARSE_OR_API_FAILURE',\n  reminder_24h_sent: value('reminder_24h_sent', 'false'), reminder_2h_sent: value('reminder_2h_sent', 'false'),\n  sla_alert_sent: value('sla_alert_sent', 'false'), reply, ready_for_review: ready, needs_human: needsHuman,\n  duration_minutes: Math.min(180, Math.max(30, Number.isFinite(requestedDuration) ? requestedDuration : 60)), ai_ok: aiOk,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        480
+      ],
+      "id": "953695d8-1cee-4287-ba3d-c284e008e759",
+      "name": "Validate Form AI"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "phone",
+              "keyValue": "={{ $json.phone }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "phone": "={{ $json.phone }}",
+            "car": "={{ $json.car }}",
+            "problem": "={{ $json.problem }}",
+            "desired_time": "={{ $json.desired_time }}",
+            "status": "={{ $json.status }}",
+            "source": "={{ $json.source }}",
+            "client_chat_id": "={{ $json.client_chat_id }}",
+            "service": "={{ $json.service }}",
+            "urgency": "={{ $json.urgency }}",
+            "ai_summary": "={{ $json.ai_summary }}",
+            "proposed_start": "={{ $json.proposed_start }}",
+            "proposed_end": "={{ $json.proposed_end }}",
+            "alternatives_json": "={{ $json.alternatives_json }}",
+            "first_response_at": "={{ $json.first_response_at }}",
+            "last_contact_at": "={{ $json.last_contact_at }}",
+            "appointment_event_id": "={{ $json.appointment_event_id }}",
+            "booked_at": "={{ $json.booked_at }}",
+            "failure_reason": "={{ $json.failure_reason }}",
+            "reminder_24h_sent": "={{ $json.reminder_24h_sent }}",
+            "reminder_2h_sent": "={{ $json.reminder_2h_sent }}",
+            "sla_alert_sent": "={{ $json.sla_alert_sent }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        480
+      ],
+      "id": "dd5323b8-0bcd-4ef3-b0b1-e1538b6def2e",
+      "name": "Upsert Form Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = $('Validate Form AI').item.json; return [{ json: { ...decision, ...$json, ready_for_review: decision.ready_for_review, needs_human: decision.needs_human, duration_minutes: decision.duration_minutes } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        480
+      ],
+      "id": "038e8b4c-f801-41b0-a3b5-5eea23e28a63",
+      "name": "Restore Form Decision"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        112,
+        1184
+      ],
+      "id": "94c59336-4045-4820-a35a-69ee99ccf316",
+      "name": "Telegram Gateway",
+      "webhookId": "e568a806-5328-4688-8b5e-e75283ed96e4",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const q = $json.callback_query;\nif (q) {\n  const [action, leadId] = String(q.data || '').split(':', 2);\n  return [{ json: { kind: 'callback', action, lead_id: leadId, callback_query_id: q.id, actor_chat_id: String(q.message?.chat?.id || ''), callback_message_id: q.message?.message_id } }];\n}\nconst m = $json.message || {};\nconst text = String(m.text || '').trim();\nif (!text || !m.chat?.id) return [];\nreturn [{ json: { kind: 'message', source: 'telegram', client_chat_id: String(m.chat.id), current_message: text, received_at: new Date().toISOString(), telegram_username: String(m.from?.username || ''), sender_name: [m.from?.first_name, m.from?.last_name].filter(Boolean).join(' ') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        1184
+      ],
+      "id": "c00da32c-93a8-4a33-b864-2823b2a98244",
+      "name": "Parse Telegram Update"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "89be6eb8-4480-4a18-8591-5bbe7e9d9cad",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.kind === \"callback\" }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        592,
+        1184
+      ],
+      "id": "18294cdc-ba40-437d-a319-40c35d5e7fc3",
+      "name": "If Callback"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_chat_id",
+              "keyValue": "={{ $json.client_chat_id }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        832,
+        1408
+      ],
+      "id": "9fe88b11-52fd-4c17-9c3b-bdb4b40cdb96",
+      "name": "Get Existing Telegram Lead",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parse Telegram Update').item.json; const existing = $json && $json.id ? $json : {}; return [{ json: { ...input, existing_state: existing } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        1408
+      ],
+      "id": "bcbdde97-051c-4055-9e69-59abd3b05eef",
+      "name": "Prepare Telegram Context"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Верни ТОЛЬКО один валидный JSON-объект без markdown и пояснений.\n\nТы ИИ-администратор вымышленного автосервиса Vektor Auto в Якутске.\nТекущее время в Якутске: {{ $now.setZone('Asia/Yakutsk').toISO() }}\nУже сохранённые данные: {{ JSON.stringify($json.existing_state || {}) }}\nНовое сообщение: {{ $json.current_message }}\n\nСхема:\n{\"reply\":\"\",\"name\":\"\",\"phone\":\"\",\"car\":\"\",\"problem\":\"\",\"service\":\"\",\"urgency\":\"normal\",\"duration_minutes\":60,\"desired_time\":\"\",\"ready_for_review\":false,\"needs_human\":false,\"ai_summary\":\"\"}\n\nПравила:\n- Извлекай сведения из нового сообщения и сохраняй уже известные сведения. Не заменяй известное значение пустой строкой.\n- Отвечай только по-русски. Не используй английские слова и названия категорий.\n- Обязательные поля: имя, телефон, автомобиль, проблема, точные дата и время.\n- Телефон должен содержать 10–15 цифр. Российский номер нормализуй к формату +7XXXXXXXXXX.\n- desired_time верни в ISO-8601 с +09:00. Относительные даты считай от указанного текущего времени Якутска.\n- Вид услуги определи самостоятельно по проблеме. Бампер, вмятины, царапины, крыло, дверь или покраска — «Кузовной ремонт».\n- Не предлагай дополнительные услуги и не спрашивай про покраску, диагностику или замену, если клиент уже описал желаемую работу.\n- Не говори, что время свободно, подходит, принято или подтверждено: календарь проверяется после тебя, запись подтверждает администратор.\n- Не ставь диагноз и не обещай окончательную цену.\n- Тормоза, рулевое управление, дым, запах топлива или перегрев: urgency=critical и needs_human=true.\n- reply — короткая русская фраза, максимум один вопрос только об отсутствующем обязательном поле.\n- ready_for_review=true только при наличии всех обязательных полей.\n- ai_summary — короткая русская выжимка для администратора.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1328,
+        1408
+      ],
+      "id": "53daf4a3-54f4-49e0-8074-0c524715dfca",
+      "name": "AI Receptionist",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Prepare Telegram Context').item.json;\nconst existing = context.existing_state || {};\nconst form = context.form_data || {};\nconst candidate = $json.output ?? $json.text ?? '';\nlet parsed = {};\nlet aiOk = true;\ntry {\n  if (candidate && typeof candidate === 'object') {\n    parsed = candidate;\n  } else {\n    let raw = String(candidate).replace(/\\x60\\x60\\x60json/gi, '').replace(/\\x60\\x60\\x60/g, '').trim();\n    const start = raw.indexOf('{'), end = raw.lastIndexOf('}');\n    if (start >= 0 && end > start) raw = raw.slice(start, end + 1);\n    parsed = JSON.parse(raw);\n    if (typeof parsed === 'string') parsed = JSON.parse(parsed);\n  }\n  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('AI output is not an object');\n} catch { aiOk = false; parsed = {}; }\n\nconst present = (value) => value !== undefined && value !== null && String(value).trim() !== '';\nconst value = (key, fallback = '') => String([parsed[key], existing[key], form[key], fallback].find(present) ?? '').trim();\nconst name = value('name');\nconst car = value('car');\nconst problem = value('problem');\nlet phoneDigits = value('phone').replace(/\\D/g, '');\nif (phoneDigits.length === 11 && phoneDigits.startsWith('8')) phoneDigits = '7' + phoneDigits.slice(1);\nconst phone = phoneDigits ? '+' + phoneDigits : '';\nconst phoneValid = /^\\+\\d{10,15}$/.test(phone);\nconst danger = /(тормоз|рул|дым|топлив|бензин|перегрев|кипит|не управ)/i.test(problem);\nconst desired = value('desired_time');\nconst desiredDate = desired ? new Date(desired) : null;\nconst validDate = Boolean(desiredDate && !Number.isNaN(desiredDate.getTime()) && desiredDate.getTime() > Date.now());\nconst complete = Boolean(name && phoneValid && car && problem && validDate);\nconst needsHuman = !aiOk || danger || Boolean(parsed.needs_human);\nconst ready = aiOk && complete && !needsHuman;\n\nconst service = /бампер|кузов|вмят|царап|крыл|двер|покрас|стекл/i.test(problem) ? 'Кузовной ремонт'\n  : /масл|фильтр|техобслуж|\\bто\\b/i.test(problem) ? 'Техническое обслуживание'\n  : /шин|колес|резин/i.test(problem) ? 'Шиномонтаж'\n  : /аккум|электр|стартер|генератор/i.test(problem) ? 'Автоэлектрика'\n  : 'Диагностика';\n\nconst firstName = name.split(/\\s+/)[0] || '';\nlet reply = firstName ? `Отлично, ${firstName}! Я собрала заявку и проверяю свободное время. После проверки сразу напишу вам.` : 'Данные получила. Проверяю свободное время.';\nif (!aiOk) reply = 'Извините, сейчас не получилось обработать сообщение автоматически. Я сохранила заявку и передала её администратору — он поможет вам лично.';\nelse if (danger) reply = 'Похоже, ситуация может быть небезопасной. Пожалуйста, не продолжайте движение, если нарушены управление или торможение. Я уже передала заявку администратору.';\nelse if (!name) reply = 'Здравствуйте! Я Анна, виртуальный администратор Vektor Auto 😊 Помогу оформить запись. Как я могу к вам обращаться?';\nelse if (!phoneValid) reply = `${firstName}, приятно познакомиться! Оставьте, пожалуйста, номер телефона для связи — например, +7 999 000-00-00.`;\nelse if (!car) reply = 'Спасибо! Подскажите, пожалуйста, марку, модель и год автомобиля.';\nelse if (!problem) reply = 'Поняла 👍 Расскажите, пожалуйста, что случилось с автомобилем или какие работы нужны.';\nelse if (!validDate) reply = 'Хорошо! На какой день и время вам было бы удобно приехать? Можно написать, например: «завтра в 11:00».';\n\nconst requestedDuration = Number(parsed.duration_minutes || existing.duration_minutes || 60);\nreturn [{ json: {\n  name, phone, car, problem, desired_time: desired,\n  status: ready ? 'Ожидает подтверждения' : (needsHuman ? 'Нужен человек' : 'Сбор данных'),\n  source: context.source, client_chat_id: String(context.client_chat_id || existing.client_chat_id || ''),\n  service, urgency: danger ? 'critical' : value('urgency', 'normal'),\n  ai_summary: aiOk ? value('ai_summary', problem) : 'ИИ недоступен — требуется ручная обработка.',\n  proposed_start: value('proposed_start'), proposed_end: value('proposed_end'), alternatives_json: value('alternatives_json', '[]'),\n  first_response_at: value('first_response_at', new Date().toISOString()), last_contact_at: new Date().toISOString(),\n  appointment_event_id: value('appointment_event_id'), booked_at: value('booked_at'), failure_reason: aiOk ? '' : 'AI_PARSE_OR_API_FAILURE',\n  reminder_24h_sent: value('reminder_24h_sent', 'false'), reminder_2h_sent: value('reminder_2h_sent', 'false'),\n  sla_alert_sent: value('sla_alert_sent', 'false'), reply, ready_for_review: ready, needs_human: needsHuman,\n  duration_minutes: Math.min(180, Math.max(30, Number.isFinite(requestedDuration) ? requestedDuration : 60)), ai_ok: aiOk,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        1408
+      ],
+      "id": "83a46eec-10e1-440f-b894-ad35db369176",
+      "name": "Validate Telegram AI"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_chat_id",
+              "keyValue": "={{ $json.client_chat_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "phone": "={{ $json.phone }}",
+            "car": "={{ $json.car }}",
+            "problem": "={{ $json.problem }}",
+            "desired_time": "={{ $json.desired_time }}",
+            "status": "={{ $json.status }}",
+            "source": "={{ $json.source }}",
+            "client_chat_id": "={{ $json.client_chat_id }}",
+            "service": "={{ $json.service }}",
+            "urgency": "={{ $json.urgency }}",
+            "ai_summary": "={{ $json.ai_summary }}",
+            "proposed_start": "={{ $json.proposed_start }}",
+            "proposed_end": "={{ $json.proposed_end }}",
+            "alternatives_json": "={{ $json.alternatives_json }}",
+            "first_response_at": "={{ $json.first_response_at }}",
+            "last_contact_at": "={{ $json.last_contact_at }}",
+            "appointment_event_id": "={{ $json.appointment_event_id }}",
+            "booked_at": "={{ $json.booked_at }}",
+            "failure_reason": "={{ $json.failure_reason }}",
+            "reminder_24h_sent": "={{ $json.reminder_24h_sent }}",
+            "reminder_2h_sent": "={{ $json.reminder_2h_sent }}",
+            "sla_alert_sent": "={{ $json.sla_alert_sent }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        1408
+      ],
+      "id": "5cc3f550-7060-452d-9b3a-4293cb98be73",
+      "name": "Upsert Telegram Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = $('Validate Telegram AI').item.json; return [{ json: { ...decision, ...$json, ready_for_review: decision.ready_for_review, needs_human: decision.needs_human, duration_minutes: decision.duration_minutes } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        1504
+      ],
+      "id": "06fc96dc-f6c2-4ed2-9ae1-2efb50f9aa39",
+      "name": "Restore Telegram Decision"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "25fa3d8c-bf60-4cc1-8baf-14a0bf424797",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.ready_for_review }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2288,
+        864
+      ],
+      "id": "c53d2060-3e9d-464a-8298-931e26598292",
+      "name": "If Ready for Review"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fd0ea830-3092-48be-84e8-1c5de459b88b",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.needs_human }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2768,
+        1312
+      ],
+      "id": "5d3fb200-4272-45f7-a0e4-12cab7b7a7cb",
+      "name": "If Needs Human"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "043c23ed-7ca8-48b1-867f-19279cda71cd",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3008,
+        1376
+      ],
+      "id": "5a659af8-c570-48ec-a3f1-326ff8804b16",
+      "name": "If Telegram Escalation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "b48d19af-d0e0-4cbc-8e67-bcb0deb1a043",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3008,
+        1520
+      ],
+      "id": "852570ca-997a-4717-aff7-101a82ac51a4",
+      "name": "If Telegram Reply"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3264,
+        1360
+      ],
+      "id": "bde69c8b-0630-45b0-8b19-5249fe441b5b",
+      "name": "Send AI Reply",
+      "webhookId": "f7ffe64f-21c8-45a2-b2f2-b64f476f4f80",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "-5513556445",
+        "text": "={{ '⚠️ Заявке №' + $json.id + ' нужен человек\\n\\n👤 ' + ($json.name || 'не указано') + '\\n📞 ' + ($json.phone || 'не указано') + '\\n🚘 ' + ($json.car || 'не указано') + '\\n🔧 ' + ($json.problem || 'не указано') + '\\nПричина: ' + ($json.failure_reason || $json.urgency) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3136,
+        1200
+      ],
+      "id": "1c103f9d-0bba-4306-8094-98115f71d383",
+      "name": "Notify Human Follow-up",
+      "webhookId": "85a782cf-5e21-48d6-b96d-c8ba718e8751",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "57bce3c0692b032ac1c80540a49fdf3df64fc635052a37fda72289c1b4d6d5ee@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "aiauto"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $now.toISO() }}",
+        "timeMax": "={{ $now.plus({ days: 7 }).toISO() }}",
+        "options": {
+          "timeZone": {
+            "__rl": true,
+            "mode": "id",
+            "value": "Asia/Yakutsk",
+            "cachedResultName": "Asia/Yakutsk"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2560,
+        768
+      ],
+      "id": "7e2ac7d5-bd40-4e84-a7fe-7e2553c8c0b0",
+      "name": "Get Upcoming Calendar Events",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "L43fB6J0si1v8m81",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('If Ready for Review').first().json;\nconst events = $input.all().map(i => i.json).filter(e => e && (e.id || e.start));\nconst duration = Math.min(180, Math.max(30, Number(lead.duration_minutes || 60))) * 60000;\nconst requested = new Date(lead.desired_time);\nif (Number.isNaN(requested.getTime())) throw new Error('Некорректное желаемое время');\nconst busy = events.map(e => {\n  const s = new Date(e.start?.dateTime || e.start || e.startTime || e.start?.date);\n  const en = new Date(e.end?.dateTime || e.end || e.endTime || e.end?.date);\n  return [s.getTime(), en.getTime()];\n}).filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e));\nconst slots = [];\nlet cursor = new Date(Math.max(requested.getTime(), Date.now() + 30 * 60000));\ncursor.setMinutes(Math.ceil(cursor.getMinutes() / 30) * 30, 0, 0);\nfor (let i = 0; i < 7 * 48 && slots.length < 3; i++, cursor = new Date(cursor.getTime() + 30 * 60000)) {\n  const local = DateTime.fromJSDate(cursor).setZone('Asia/Yakutsk');\n  const weekday = local.weekday;\n  const minutes = local.hour * 60 + local.minute;\n  if (weekday === 7 || minutes < 540 || minutes + duration / 60000 > 1140) continue;\n  const start = cursor.getTime(), end = start + duration;\n  if (busy.some(([bs, be]) => start < be && end > bs)) continue;\n  slots.push({ start: new Date(start).toISOString(), end: new Date(end).toISOString() });\n}\nif (!slots.length) throw new Error('Нет свободного окна в ближайшие 7 дней');\nreturn [{ json: { ...lead, proposed_start: slots[0].start, proposed_end: slots[0].end, alternatives_json: JSON.stringify(slots.slice(1)), slot_changed: Math.abs(new Date(slots[0].start).getTime() - requested.getTime()) > 60000 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        768
+      ],
+      "id": "d255a4a3-5f50-40c8-817b-c2eea7045314",
+      "name": "Choose Available Slot"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "proposed_start": "={{ $json.proposed_start }}",
+            "proposed_end": "={{ $json.proposed_end }}",
+            "alternatives_json": "={{ $json.alternatives_json }}",
+            "status": "Ожидает подтверждения",
+            "sla_alert_sent": "false"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3040,
+        768
+      ],
+      "id": "ec209f73-4b93-42b2-a115-9327ba9d9d80",
+      "name": "Update Lead Slot"
+    },
+    {
+      "parameters": {
+        "chatId": "-5513556445",
+        "text": "={{ '🚗 Заявка №' + $json.id + '\\n\\n👤 ' + $json.name + '\\n📞 ' + $json.phone + '\\n🚘 ' + $json.car + '\\n🔧 ' + $json.problem + '\\n🏷 ' + $json.service + '\\n⚠️ Срочность: ' + ($json.urgency === 'critical' ? 'Критическая' : $json.urgency === 'urgent' ? 'Срочная' : 'Обычная') + '\\n🕒 Предложено: ' + DateTime.fromISO($json.proposed_start).setZone('Asia/Yakutsk').toFormat('dd.LL.yyyy HH:mm') + '\\n\\n🤖 ' + $json.ai_summary }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Принять",
+                    "additionalFields": {
+                      "callback_data": "={{ 'approve:' + $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "🕒 Другое время",
+                    "additionalFields": {
+                      "callback_data": "={{ 'reschedule:' + $json.id }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "❓ Уточнить",
+                    "additionalFields": {
+                      "callback_data": "={{ 'clarify:' + $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Отказать",
+                    "additionalFields": {
+                      "callback_data": "={{ 'reject:' + $json.id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3280,
+        688
+      ],
+      "id": "9ed923ae-2252-4231-82d7-88a4a425de62",
+      "name": "Send Admin Approval Card",
+      "webhookId": "89b2e334-d933-4a83-b605-7fb1d60508d2",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "3af973d5-4105-45f5-841b-df48f4a7a778",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3280,
+        864
+      ],
+      "id": "5a1d38ee-8852-477f-9367-1644d6b018ce",
+      "name": "If Telegram Lead"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "={{ 'Спасибо, ' + ($json.name || '').split(' ')[0] + '! Я нашла предварительное время: ' + DateTime.fromISO($json.proposed_start).setZone('Asia/Yakutsk').toFormat('dd.LL.yyyy HH:mm') + '. Заявка уже у администратора — как только он подтвердит запись, я сразу напишу.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        864
+      ],
+      "id": "8b34d2ca-c050-4998-84d5-ce899cb58e76",
+      "name": "Send Review Acknowledgement",
+      "webhookId": "10826a2b-e72c-43d3-831e-8c62b90b5171",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "648805d1-5c22-421e-8e9a-f08ed7544320",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ String($json.actor_chat_id) === '-5513556445' }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        1008
+      ],
+      "id": "6a16ae2f-8ceb-4880-ac67-9bbbc7578923",
+      "name": "If Authorized Admin"
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $json.callback_query_id }}",
+        "additionalFields": {
+          "show_alert": true,
+          "text": "Недостаточно прав"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        848
+      ],
+      "id": "2b2f8f18-0012-40f1-b2cd-85cb0ece0a82",
+      "name": "Answer Unauthorized",
+      "webhookId": "cddb5c9d-638d-42a2-878b-32f792690999",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.lead_id }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        1088
+      ],
+      "id": "7ae86471-1d09-4ffe-ba55-540f8c47e2d2",
+      "name": "Get Lead for Admin Action"
+    },
+    {
+      "parameters": {
+        "jsCode": "const action = $('Parse Telegram Update').item.json; const labels = { approve: '✅ Решение: принято', reschedule: '🕒 Решение: предложить другое время', clarify: '❓ Решение: запросить уточнение', reject: '❌ Решение: отказано' }; return [{ json: { ...$json, ...action, decision_label: labels[action.action] || 'Решение обработано' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        1088
+      ],
+      "id": "7c1dc28f-b5e7-4e70-84cb-b6a89acd6dba",
+      "name": "Attach Admin Action"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "a4963961-9120-44ff-8211-8914036559c0",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.action === \"approve\" }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        1088
+      ],
+      "id": "810b1a49-3790-4a27-bc70-add763e72275",
+      "name": "If Approve"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "57bce3c0692b032ac1c80540a49fdf3df64fc635052a37fda72289c1b4d6d5ee@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "aiauto"
+        },
+        "start": "={{ $json.proposed_start }}",
+        "end": "={{ $json.proposed_end }}",
+        "additionalFields": {
+          "description": "={{ 'Телефон: ' + $json.phone + '\\nАвтомобиль: ' + $json.car + '\\nПроблема: ' + $json.problem + '\\nЗаявка №' + $json.id }}",
+          "summary": "={{ 'Vektor Auto — ' + $json.name + ' — ' + $json.service }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1808,
+        1008
+      ],
+      "id": "b592b2aa-4743-457c-8270-68cf64bf005a",
+      "name": "Create Calendar Booking",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "L43fB6J0si1v8m81",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Attach Admin Action').item.json; const event = $json; return [{ json: { ...lead, appointment_event_id: String(event.id || event.eventId || ''), booked_at: new Date().toISOString(), status: 'Записан' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        1008
+      ],
+      "id": "c0de49ac-20d2-42c9-8517-0058b664f60d",
+      "name": "Format Booking Result"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "Записан",
+            "appointment_event_id": "={{ $json.appointment_event_id }}",
+            "booked_at": "={{ $json.booked_at }}",
+            "reminder_24h_sent": "false",
+            "reminder_2h_sent": "false"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2288,
+        1008
+      ],
+      "id": "3090ebbb-8c10-4d88-ad64-d07d9c0b8041",
+      "name": "Update Approved Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const booked = $('Format Booking Result').item.json; return [{ json: { ...booked, ...$json, client_chat_id: booked.client_chat_id, proposed_start: booked.proposed_start } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2608,
+        944
+      ],
+      "id": "6bc00b94-5252-4086-8aea-7cb5ef0f97d8",
+      "name": "Restore Approved Lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cbd3d355-fa54-4cb0-8ef6-630d639d239c",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2784,
+        928
+      ],
+      "id": "93e64c7f-6e62-48c6-8a9c-f54d3869d5a9",
+      "name": "If Has Client Chat After Booking"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "={{ ($json.name || '').split(' ')[0] + ', ваша запись подтверждена ✅\\n\\n🗓 ' + DateTime.fromISO($json.proposed_start).setZone('Asia/Yakutsk').toFormat('dd.LL.yyyy HH:mm') + '\\n🚘 ' + $json.car + '\\n🔧 ' + $json.service + '\\n\\nДо встречи в Vektor Auto! Я заранее напомню о визите.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3008,
+        960
+      ],
+      "id": "87cd74e8-d385-47ac-b2eb-d14f10e0d57e",
+      "name": "Send Booking Confirmation",
+      "webhookId": "b173db5f-a882-4bfb-8d72-3a4043cc9da9",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Parse Telegram Update').item.json.callback_query_id }}",
+        "additionalFields": {
+          "text": "Запись подтверждена ✅"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2816,
+        1056
+      ],
+      "id": "d8f6136d-a915-4489-9a83-ed8f3246fc61",
+      "name": "Answer Approved Callback",
+      "webhookId": "e17d6408-c968-43c9-b774-f5fbf29aae04",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "bfd02d44-917c-4d4c-84f4-7cd91736384d",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.action === \"reschedule\" }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1808,
+        1232
+      ],
+      "id": "4a478f3b-2ef4-430d-8cf0-e0d4b3c7adea",
+      "name": "If Reschedule"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "Ожидает другое время",
+            "proposed_start": "",
+            "proposed_end": "",
+            "sla_alert_sent": "false"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        1200
+      ],
+      "id": "f004ee72-9888-4448-9cd0-db882ef3ca24",
+      "name": "Update Reschedule Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Attach Admin Action').item.json; return [{ json: { ...lead, ...$json, client_chat_id: lead.client_chat_id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        1200
+      ],
+      "id": "1720e069-6053-4a2b-9aa0-ea75185bbd52",
+      "name": "Restore Reschedule Lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "7ce47c72-3ed1-45b9-83b6-792c29c8fe45",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2512,
+        1152
+      ],
+      "id": "f6b98e79-4b92-45bf-8bbb-0ebd4c14553f",
+      "name": "If Has Client Chat Reschedule"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "Администратор посмотрел заявку и предложил выбрать другое время. Напишите, пожалуйста, новую дату и время одним сообщением.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2928,
+        1184
+      ],
+      "id": "8b68cea5-2855-42ae-8adf-bd0f9ae34098",
+      "name": "Ask Client for Another Time",
+      "webhookId": "5cfbb2e0-a32f-4039-984f-f75dd46dceb0",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Parse Telegram Update').item.json.callback_query_id }}",
+        "additionalFields": {
+          "text": "Запрошено другое время 🕒"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2528,
+        1312
+      ],
+      "id": "c591e95e-47c3-4401-b7da-2edcf8e24075",
+      "name": "Answer Reschedule Callback",
+      "webhookId": "65ba640b-894a-487e-823f-fd2ea1069d1d",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "88853f1b-aeae-4bc8-87a1-890dd45ce2b7",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.action === \"clarify\" }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        1568
+      ],
+      "id": "4e64e306-d1e0-4ccf-85d4-68c8157d33f6",
+      "name": "If Clarify"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "Нужно уточнение",
+            "sla_alert_sent": "false"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        1408
+      ],
+      "id": "3c870d49-b011-4bbb-8e94-53aae658f3d0",
+      "name": "Update Clarify Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Attach Admin Action').item.json; return [{ json: { ...lead, ...$json, client_chat_id: lead.client_chat_id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        1408
+      ],
+      "id": "8b823a23-8ace-488a-93bb-d65ab0c12e03",
+      "name": "Restore Clarify Lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "03490984-4cb9-4826-839e-d10ff0c684c5",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2528,
+        1472
+      ],
+      "id": "d6d610f2-a2b6-4975-acfa-320b75c7751b",
+      "name": "If Has Client Chat Clarify"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "Чтобы мастер лучше подготовился, добавьте, пожалуйста, немного деталей о проблеме или автомобиле.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2784,
+        1472
+      ],
+      "id": "44b7878f-5c0e-4958-befa-1a615bccaed5",
+      "name": "Ask Client to Clarify",
+      "webhookId": "2278bb8a-cf80-4dbd-9143-a3a76671a90d",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Parse Telegram Update').item.json.callback_query_id }}",
+        "additionalFields": {
+          "text": "Запрошено уточнение ❓"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2528,
+        1584
+      ],
+      "id": "edfd6768-16b5-47ef-9136-7bee97a9c050",
+      "name": "Answer Clarify Callback",
+      "webhookId": "838eb92c-5e36-4f30-9132-9a1010f81a10",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "Отказ",
+            "failure_reason": "ADMIN_REJECTED"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        1600
+      ],
+      "id": "da897b5c-0fd9-44fc-a66b-7d89d89157b2",
+      "name": "Update Rejected Lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Attach Admin Action').item.json; return [{ json: { ...lead, ...$json, client_chat_id: lead.client_chat_id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        1600
+      ],
+      "id": "f4c0c0dc-af87-43dc-9d4c-56ee7e69f6d8",
+      "name": "Restore Rejected Lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "96676dab-4957-4814-814a-18542264ea69",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ Boolean($json.client_chat_id) }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2528,
+        1728
+      ],
+      "id": "f6b33183-551e-4650-9ce6-de1210b3a857",
+      "name": "If Has Client Chat Reject"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "К сожалению, сейчас мы не можем подтвердить эту запись. Я передала заявку администратору — он свяжется с вами, если появится подходящий вариант.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2768,
+        1600
+      ],
+      "id": "680fadcd-3b61-4fb4-bb22-3bdfef2ab711",
+      "name": "Send Rejection",
+      "webhookId": "154fc412-93c2-4481-b587-8fe6d417f2c9",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Parse Telegram Update').item.json.callback_query_id }}",
+        "additionalFields": {
+          "text": "Заявка отклонена"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2528,
+        1904
+      ],
+      "id": "98c5565c-2a68-4cd4-8a9a-893c7c71df86",
+      "name": "Answer Reject Callback",
+      "webhookId": "b2146f39-e664-4c47-93a1-6d790a475246",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        112,
+        1952
+      ],
+      "id": "5dc84971-9b41-41a4-b7fc-7c7b2f718cb1",
+      "name": "Every 15 Minutes"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "Записан"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        1840
+      ],
+      "id": "85cc5c48-95c2-4517-907c-863afcaefe0f",
+      "name": "Get Confirmed Leads",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = Date.now(); const due = [];\nfor (const item of $input.all()) {\n  const j = item.json || {}; const start = new Date(j.proposed_start).getTime();\n  if (!Number.isFinite(start) || !j.client_chat_id) continue;\n  const minutes = (start - now) / 60000;\n  let type = '';\n  if (j.reminder_24h_sent !== 'true' && minutes >= 1380 && minutes <= 1500) type = '24h';\n  if (j.reminder_2h_sent !== 'true' && minutes >= 105 && minutes <= 135) type = '2h';\n  if (!type) continue;\n  due.push({ json: { ...j, reminder_type: type, reminder_text: '⏰ Напоминание Vektor Auto\\n\\nЗапись ' + DateTime.fromISO(j.proposed_start).setZone('Asia/Yakutsk').toFormat('dd.LL.yyyy HH:mm') + '\\n' + j.car + ' — ' + j.service } });\n}\nreturn due;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        1840
+      ],
+      "id": "02716237-9b67-4b6b-b3b1-860ea1efce9f",
+      "name": "Find Due Reminders"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "={{ $json.reminder_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        1840
+      ],
+      "id": "9ab64028-00ca-4d4a-bab0-dab78dd27948",
+      "name": "Send Booking Reminder",
+      "webhookId": "52a962ea-80d6-4617-8354-c6507f3c5d96",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Find Due Reminders').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reminder_24h_sent": "={{ $('Find Due Reminders').item.json.reminder_type === '24h' ? 'true' : $('Find Due Reminders').item.json.reminder_24h_sent }}",
+            "reminder_2h_sent": "={{ $('Find Due Reminders').item.json.reminder_type === '2h' ? 'true' : $('Find Due Reminders').item.json.reminder_2h_sent }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        1840
+      ],
+      "id": "32e72748-99a6-4dc8-ad99-1f86ed72dcab",
+      "name": "Mark Reminder Sent"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "Ожидает подтверждения"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        2080
+      ],
+      "id": "db3f73d1-9078-4b57-8d99-a2388cca520c",
+      "name": "Get New Leads for SLA",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = Date.now(); return $input.all().filter(i => {\n  const j = i.json || {}; const created = new Date(j.createdAt || j.first_response_at).getTime();\n  return j.id && j.sla_alert_sent !== 'true' && Number.isFinite(created) && now - created >= 15 * 60000;\n}).map(i => ({ json: { ...i.json, alert_text: '🚨 Заявка №' + i.json.id + ' ждёт подтверждения больше 15 минут\\n' + (i.json.name || '') + ' · ' + (i.json.phone || '') } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        2080
+      ],
+      "id": "34919491-357d-464e-9c0c-c41484206234",
+      "name": "Find SLA Breaches"
+    },
+    {
+      "parameters": {
+        "chatId": "-5513556445",
+        "text": "={{ $json.alert_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        2080
+      ],
+      "id": "d9ff5f90-50bb-477b-afd8-6c94b93020f0",
+      "name": "Send SLA Alert",
+      "webhookId": "ca3d2ff7-e992-40a3-8559-15806ae6b9d3",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Find SLA Breaches').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sla_alert_sent": "true"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "car",
+              "displayName": "car",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "problem",
+              "displayName": "problem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "desired_time",
+              "displayName": "desired_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_start",
+              "displayName": "proposed_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "proposed_end",
+              "displayName": "proposed_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "alternatives_json",
+              "displayName": "alternatives_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "first_response_at",
+              "displayName": "first_response_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_contact_at",
+              "displayName": "last_contact_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "appointment_event_id",
+              "displayName": "appointment_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "booked_at",
+              "displayName": "booked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "failure_reason",
+              "displayName": "failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_2h_sent",
+              "displayName": "reminder_2h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sla_alert_sent",
+              "displayName": "sla_alert_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        2080
+      ],
+      "id": "ddcbddd5-3da9-4696-800b-831241a19a52",
+      "name": "Mark SLA Alert Sent"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        112,
+        2352
+      ],
+      "id": "5a036447-1a07-4eeb-ba5a-a8b939e2e1bb",
+      "name": "Daily Owner Report"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qs5OSSz4rtpFNq9f",
+          "mode": "list",
+          "cachedResultName": "Заявки автосервиса",
+          "cachedResultUrl": "/projects/pih1jYTpDJDhMfzE/datatables/qs5OSSz4rtpFNq9f"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        2352
+      ],
+      "id": "e410f7f7-39cd-4ddb-9174-1eb2bec6bf82",
+      "name": "Get Leads for Daily Report",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = DateTime.now().setZone('Asia/Yakutsk'); const rows = $input.all().map(i => i.json || {}).filter(j => j.id);\nconst today = rows.filter(j => { const d = DateTime.fromISO(j.createdAt || j.first_response_at || '', { zone: 'Asia/Yakutsk' }); return d.isValid && d.hasSame(now, 'day'); });\nconst count = status => today.filter(j => j.status === status).length;\nconst responseSeconds = today.map(j => (new Date(j.first_response_at) - new Date(j.createdAt)) / 1000).filter(Number.isFinite);\nconst avg = responseSeconds.length ? Math.round(responseSeconds.reduce((a,b)=>a+b,0)/responseSeconds.length) : 0;\nreturn [{ json: { report: '📊 Vektor Auto — отчёт за ' + now.toFormat('dd.LL.yyyy') + '\\n\\nНовые заявки: ' + today.length + '\\nЗаписано: ' + count('Записан') + '\\nЖдут подтверждения: ' + count('Ожидает подтверждения') + '\\nНужен человек: ' + count('Нужен человек') + '\\nОтказ: ' + count('Отказ') + '\\nСреднее время первого ответа: ' + avg + ' сек.' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        2352
+      ],
+      "id": "211f7f8d-3e9b-420c-9543-8a5a4fd71b09",
+      "name": "Build Daily Report"
+    },
+    {
+      "parameters": {
+        "chatId": "-5513556445",
+        "text": "={{ $json.report }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        2352
+      ],
+      "id": "4e02ad0f-5b9f-415a-b9a8-bf7ba5a75c38",
+      "name": "Send Owner Report",
+      "webhookId": "61faf435-7211-450d-baac-a2fe26a06182",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nex-agi/nex-n2.5-mini:free",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        1616
+      ],
+      "id": "8499d8b5-50ad-42f2-87a6-82e7371ba5c1",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "mRuLUqh6CkdsW2p5",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nex-agi/nex-n2.5-mini:free",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        672
+      ],
+      "id": "692f6d4a-8658-4fbb-9f0b-460ab9d70a85",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "mRuLUqh6CkdsW2p5",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "7425da1c-be4d-4a7b-a9c4-0aa2082889a7",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.status === \"Ожидает подтверждения\" }}",
+              "rightValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1488,
+        880
+      ],
+      "id": "be553d04-89a4-491c-ac0f-d53998d6166c",
+      "name": "If Admin Action Pending"
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Parse Telegram Update').item.json.callback_query_id }}",
+        "additionalFields": {
+          "text": "По этой заявке решение уже принято."
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1744,
+        816
+      ],
+      "id": "0bca5039-7d8c-4384-be54-887392081d9d",
+      "name": "Answer Already Handled Callback",
+      "webhookId": "4230b9b3-3557-44cf-8dd0-0eb4fcf62a0c",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "editMessageText",
+        "chatId": "={{ $('Parse Telegram Update').item.json.actor_chat_id }}",
+        "messageId": "={{ $('Parse Telegram Update').item.json.callback_message_id }}",
+        "text": "={{ '🚗 Заявка №' + $('Attach Admin Action').item.json.id + '\\n\\n👤 ' + $('Attach Admin Action').item.json.name + '\\n📞 ' + $('Attach Admin Action').item.json.phone + '\\n🚘 ' + $('Attach Admin Action').item.json.car + '\\n🔧 ' + $('Attach Admin Action').item.json.problem + '\\n🏷 ' + $('Attach Admin Action').item.json.service + '\\n\\n' + $('Attach Admin Action').item.json.decision_label }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        1136
+      ],
+      "id": "33339e78-2ee0-4ef5-9987-d446bd1765a6",
+      "name": "Close Admin Card",
+      "webhookId": "b954e1ea-fc5a-487c-81de-8bd4f497b732",
+      "credentials": {
+        "telegramApi": {
+          "id": "V4ov1RiSYXJlWuWz",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Capture Form": {
+      "main": [
+        [
+          {
+            "node": "Normalize Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Form": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Form Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Form Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare Form Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Form Context": {
+      "main": [
+        [
+          {
+            "node": "AI Form Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Form Intake": {
+      "main": [
+        [
+          {
+            "node": "Validate Form AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Form AI": {
+      "main": [
+        [
+          {
+            "node": "Upsert Form Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Form Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Form Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Form Decision": {
+      "main": [
+        [
+          {
+            "node": "If Ready for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Gateway": {
+      "main": [
+        [
+          {
+            "node": "Parse Telegram Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Telegram Update": {
+      "main": [
+        [
+          {
+            "node": "If Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Callback": {
+      "main": [
+        [
+          {
+            "node": "If Authorized Admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Existing Telegram Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Telegram Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Context": {
+      "main": [
+        [
+          {
+            "node": "AI Receptionist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Receptionist": {
+      "main": [
+        [
+          {
+            "node": "Validate Telegram AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Telegram AI": {
+      "main": [
+        [
+          {
+            "node": "Upsert Telegram Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Telegram Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Telegram Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Telegram Decision": {
+      "main": [
+        [
+          {
+            "node": "If Ready for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Ready for Review": {
+      "main": [
+        [
+          {
+            "node": "Get Upcoming Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Needs Human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Needs Human": {
+      "main": [
+        [
+          {
+            "node": "Notify Human Follow-up",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Telegram Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Telegram Escalation": {
+      "main": [
+        [
+          {
+            "node": "Send AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Telegram Reply": {
+      "main": [
+        [
+          {
+            "node": "Send AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Human Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Upcoming Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Choose Available Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose Available Slot": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Slot": {
+      "main": [
+        [
+          {
+            "node": "Send Admin Approval Card",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Telegram Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Telegram Lead": {
+      "main": [
+        [
+          {
+            "node": "Send Review Acknowledgement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Authorized Admin": {
+      "main": [
+        [
+          {
+            "node": "Get Lead for Admin Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead for Admin Action": {
+      "main": [
+        [
+          {
+            "node": "Attach Admin Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Admin Action": {
+      "main": [
+        [
+          {
+            "node": "If Admin Action Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Approve": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Booking",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Reschedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Booking": {
+      "main": [
+        [
+          {
+            "node": "Format Booking Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Booking Result": {
+      "main": [
+        [
+          {
+            "node": "Update Approved Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Approved Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Approved Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Approved Lead": {
+      "main": [
+        [
+          {
+            "node": "If Has Client Chat After Booking",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Answer Approved Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Client Chat After Booking": {
+      "main": [
+        [
+          {
+            "node": "Send Booking Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Reschedule": {
+      "main": [
+        [
+          {
+            "node": "Update Reschedule Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Reschedule Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Reschedule Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Reschedule Lead": {
+      "main": [
+        [
+          {
+            "node": "If Has Client Chat Reschedule",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Answer Reschedule Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Client Chat Reschedule": {
+      "main": [
+        [
+          {
+            "node": "Ask Client for Another Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Clarify": {
+      "main": [
+        [
+          {
+            "node": "Update Clarify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Rejected Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clarify Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Clarify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Clarify Lead": {
+      "main": [
+        [
+          {
+            "node": "If Has Client Chat Clarify",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Answer Clarify Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Client Chat Clarify": {
+      "main": [
+        [
+          {
+            "node": "Ask Client to Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Rejected Lead": {
+      "main": [
+        [
+          {
+            "node": "Restore Rejected Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Rejected Lead": {
+      "main": [
+        [
+          {
+            "node": "If Has Client Chat Reject",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Answer Reject Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Client Chat Reject": {
+      "main": [
+        [
+          {
+            "node": "Send Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Confirmed Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get New Leads for SLA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Confirmed Leads": {
+      "main": [
+        [
+          {
+            "node": "Find Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "Send Booking Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Booking Reminder": {
+      "main": [
+        [
+          {
+            "node": "Mark Reminder Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Leads for SLA": {
+      "main": [
+        [
+          {
+            "node": "Find SLA Breaches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find SLA Breaches": {
+      "main": [
+        [
+          {
+            "node": "Send SLA Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SLA Alert": {
+      "main": [
+        [
+          {
+            "node": "Mark SLA Alert Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Owner Report": {
+      "main": [
+        [
+          {
+            "node": "Get Leads for Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads for Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Build Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Send Owner Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Receptionist",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Form Intake",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Admin Action Pending": {
+      "main": [
+        [
+          {
+            "node": "If Approve",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Already Handled Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Approved Callback": {
+      "main": [
+        [
+          {
+            "node": "Close Admin Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Reschedule Callback": {
+      "main": [
+        [
+          {
+            "node": "Close Admin Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Clarify Callback": {
+      "main": [
+        [
+          {
+            "node": "Close Admin Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Reject Callback": {
+      "main": [
+        [
+          {
+            "node": "Close Admin Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "W43SLfVuVHW692n4",
+    "timezone": "Asia/Yakutsk",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "d663a51f-3b93-4fe3-894f-e51eaf6f113d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "49fff619c33f3c3c87c36624028fd6b96ca5d201be53ffe20e8a0824ebbc8d36"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

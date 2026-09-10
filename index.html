@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Vektor Auto — демонстрационный сайт мультибрендового автосервиса с автоматизированной записью.">
+  <meta name="theme-color" content="#ed2b22">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23ed2b22' d='M4 8h20l8 14 8-14h20L32 58z'/%3E%3C/svg%3E">
+  <title>Vektor Auto — сервис в правильном направлении</title>
+  <link rel="preload" href="/assets/hero-car.png" as="image">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">К основному содержанию</a>
+
+  <header class="site-header">
+    <a class="logo" href="#top" aria-label="Vektor Auto — на главную">
+      <svg viewBox="0 0 44 44" aria-hidden="true"><path d="M4 7h14l4 8 4-8h14L22 39 4 7Zm11 7 7 13 7-13h-5l-2 5-2-5h-5Z"/></svg>
+      <span>VEKTOR<small>AUTO SERVICE</small></span>
+    </a>
+    <nav aria-label="Основная навигация">
+      <a href="#services">Услуги</a>
+      <a href="#process">Как работаем</a>
+      <a href="#booking">Запись</a>
+    </nav>
+    <a class="header-cta" href="#booking">Записаться <span aria-hidden="true">↘</span></a>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="hero-copy reveal">
+        <p class="eyebrow"><span></span> Мультибрендовый автосервис · Якутск</p>
+        <h1>ДЕРЖИМ<br>МАШИНУ<br><em>В ФОРМЕ.</em></h1>
+        <p class="hero-lead">От первой диагностики до подтверждённой записи — без телефонной очереди и потерянных заявок.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#booking">Записаться онлайн <span>↘</span></a>
+          <a class="button button-ghost" href="/telegram" target="_blank" rel="noopener">Написать Анне <span>↗</span></a>
+        </div>
+      </div>
+
+      <div class="hero-visual reveal">
+        <span class="hero-word" aria-hidden="true">VEKTOR</span>
+        <span class="crosshair crosshair-one" aria-hidden="true"></span>
+        <span class="crosshair crosshair-two" aria-hidden="true"></span>
+        <img src="/assets/hero-car.png" width="1536" height="1024" alt="Графитовый современный кроссовер">
+        <div class="vehicle-tag"><b>01</b><span>Диагностика<br>до начала работ</span></div>
+      </div>
+
+      <aside class="hero-note reveal">
+        <div class="avatar" aria-hidden="true">А</div>
+        <div><strong>Анна на связи</strong><span>Виртуальный администратор принимает заявки 24/7</span></div>
+        <i aria-hidden="true"></i>
+      </aside>
+    </section>
+
+    <div class="service-ticker" aria-label="Направления работ">
+      <div><span>ДИАГНОСТИКА</span><b>◆</b><span>ТЕХОБСЛУЖИВАНИЕ</span><b>◆</b><span>АВТОЭЛЕКТРИКА</span><b>◆</b><span>ХОДОВАЯ</span><b>◆</b><span>КУЗОВ</span><b>◆</b><span>ШИНОМОНТАЖ</span></div>
+    </div>
+
+    <section class="section services" id="services">
+      <div class="section-heading reveal">
+        <p class="eyebrow"><span></span> Работаем по делу</p>
+        <h2>НЕ ГАДАЕМ.<br><em>ПРОВЕРЯЕМ.</em></h2>
+        <p>Определим причину после диагностики, согласуем объём работ и только затем приступим.</p>
+      </div>
+
+      <div class="service-grid">
+        <article class="service-card service-card-featured reveal">
+          <div class="card-top"><span>01 / CORE</span><b>↘</b></div>
+          <h3>ТО И<br>ДИАГНОСТИКА</h3>
+          <p>Комплексная проверка, регламентное обслуживание, масла и фильтры.</p>
+          <div class="scan-lines" aria-hidden="true"></div>
+        </article>
+        <article class="service-card reveal">
+          <div class="card-top"><span>02 / CONTROL</span><b>↘</b></div>
+          <h3>ХОДОВАЯ<br>И ТОРМОЗА</h3>
+          <p>Подвеска, рулевое управление и тормозная система.</p>
+        </article>
+        <article class="service-card reveal">
+          <div class="card-top"><span>03 / ELECTRIC</span><b>↘</b></div>
+          <h3>АВТО-<br>ЭЛЕКТРИКА</h3>
+          <p>Аккумулятор, стартер, генератор и поиск неисправностей.</p>
+        </article>
+        <article class="service-card service-card-red reveal">
+          <div class="card-top"><span>04 / BODY</span><b>↘</b></div>
+          <h3>КУЗОВ<br>И КОЛЁСА</h3>
+          <p>Локальный ремонт, покраска, шиномонтаж и балансировка.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="process" id="process">
+      <div class="process-header reveal">
+        <p class="eyebrow eyebrow-light"><span></span> Чёткий процесс</p>
+        <h2>ЗАПИСЬ БЕЗ<br><em>ХОЛОСТОГО ХОДА.</em></h2>
+      </div>
+      <ol class="steps">
+        <li class="reveal"><b>01</b><div><h3>Оставьте заявку</h3><p>На сайте или в Telegram. Анна уточнит главное и ничего не потеряет.</p></div></li>
+        <li class="reveal"><b>02</b><div><h3>Проверим время</h3><p>Система сверит календарь, а администратор подтвердит реальный слот.</p></div></li>
+        <li class="reveal"><b>03</b><div><h3>Получите подтверждение</h3><p>Привяжите Telegram после формы — там придут решение и напоминание.</p></div></li>
+      </ol>
+      <div class="automation-rail reveal" aria-label="Автоматизированный путь заявки">
+        <span>САЙТ</span><i>→</i><span>АННА</span><i>→</i><span>АДМИНИСТРАТОР</span><i>→</i><span>КАЛЕНДАРЬ</span><i>→</i><span>КЛИЕНТ</span>
+      </div>
+    </section>
+
+    <section class="booking" id="booking">
+      <div class="booking-copy reveal">
+        <p class="eyebrow eyebrow-light"><span></span> Запросить время</p>
+        <h2>ЗАЕЗЖАЙТЕ<br><em>ПО ЗАПИСИ.</em></h2>
+        <p>Заполните форму — заявка уйдёт администратору. Время считается свободным только после подтверждения.</p>
+        <div class="booking-facts">
+          <span><b>✓</b> Согласуем до начала работ</span>
+          <span><b>✓</b> Финальное решение принимает человек</span>
+          <span><b>✓</b> Напомним о визите в Telegram</span>
+        </div>
+        <a class="telegram-card" href="/telegram" target="_blank" rel="noopener">
+          <span class="telegram-icon" aria-hidden="true">↗</span>
+          <span><small>Удобнее в мессенджере?</small><strong>Написать Анне в Telegram</strong></span>
+          <b aria-hidden="true">→</b>
+        </a>
+      </div>
+
+      <div class="form-shell reveal">
+        <div class="form-meta"><span>ЗАЯВКА / 01</span><button type="button" id="fill-demo">Заполнить демо-данными</button></div>
+        <form id="lead-form" novalidate>
+          <div class="field-row">
+            <label><span>Ваше имя</span><input name="name" autocomplete="name" maxlength="80" placeholder="Например, Алексей" required></label>
+            <label><span>Телефон</span><input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="+7 999 000-00-00" required></label>
+          </div>
+          <label><span>Автомобиль</span><input name="car" autocomplete="off" maxlength="120" placeholder="Марка, модель и год" required></label>
+          <label><span>Что нужно сделать</span><textarea name="problem" maxlength="700" rows="4" placeholder="Опишите проблему или нужные работы" required></textarea></label>
+          <div class="field-row">
+            <label><span>Желаемая дата</span><input name="desired_date" type="date" required></label>
+            <label><span>Желаемое время</span><input name="desired_time" type="time" required></label>
+          </div>
+          <label class="honeypot" aria-hidden="true">Ваш сайт<input name="website" tabindex="-1" autocomplete="off"></label>
+          <label class="consent"><input name="consent" type="checkbox" required><span>Это демонстрационный проект. Я использую только вымышленные данные.</span></label>
+          <p class="demo-warning">Не вводите настоящие имя и телефон. Для проверки используйте демо-данные.</p>
+          <button class="submit-button" type="submit"><span>Отправить заявку</span><b aria-hidden="true">↘</b></button>
+          <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+        </form>
+
+        <div class="success-panel" id="success-panel" hidden>
+          <span class="success-mark" aria-hidden="true">✓</span>
+          <p class="eyebrow"><span></span> Заявка передана</p>
+          <h3>ПРОДОЛЖИМ<br>В TELEGRAM.</h3>
+          <p>Свяжите чат с заявкой. После проверки администратором Анна пришлёт подтверждение и напоминание.</p>
+          <a class="button button-primary" id="success-telegram" href="/telegram" target="_blank" rel="noopener">Связать Telegram <span>↗</span></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="logo logo-light" href="#top" aria-label="Vektor Auto — наверх">
+      <svg viewBox="0 0 44 44" aria-hidden="true"><path d="M4 7h14l4 8 4-8h14L22 39 4 7Zm11 7 7 13 7-13h-5l-2 5-2-5h-5Z"/></svg>
+      <span>VEKTOR<small>AUTO SERVICE</small></span>
+    </a>
+    <p>Портфельный демонстрационный проект.<br>Не является сайтом действующего автосервиса.</p>
+    <p class="footer-tech">SITE × N8N × TELEGRAM × CALENDAR<br><span>Собрано как реальный продукт</span></p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "vektor-auto-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "build:workflow": "node scripts/build-workflow.mjs",
+    "test": "node scripts/build-workflow.mjs && node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -35,11 +35,11 @@
 - Sends: normalized JSON with `request_id` to `N8N_WEBHOOK_URL`
 - Returns: `{ok, requestId, telegramUrl}` without secrets
 
-- [ ] Write tests for invalid input, honeypot, missing environment, duplicate request, and successful relay.
-- [ ] Run the tests and confirm they fail.
-- [ ] Implement validation, rate limiting, deduplication, n8n relay, and Telegram URL generation.
-- [ ] Implement the local static server and minimal `.env` loader.
-- [ ] Run the tests and confirm they pass.
+- [x] Write tests for invalid input, honeypot, missing environment, duplicate request, and successful relay.
+- [x] Run the tests and confirm they fail.
+- [x] Implement validation, rate limiting, deduplication, n8n relay, and Telegram URL generation.
+- [x] Implement the local static server and minimal `.env` loader.
+- [x] Run the tests and confirm they pass.
 
 ### Task 2: Responsive landing page
 
@@ -47,16 +47,16 @@
 - Create: `index.html`
 - Create: `styles.css`
 - Create: `app.js`
-- Create: `assets/hero-car.webp`
+- Create: `assets/hero-car.png`
 
 **Interfaces:**
 - Calls: `POST /api/lead`
 - Opens: `/telegram` before submission and returned deep link after submission
 
-- [ ] Build semantic page structure and accessible form states.
-- [ ] Add the original hero asset and responsive industrial visual system.
-- [ ] Add native client validation, submit locking, and success/error panels.
-- [ ] Check desktop and 390 px mobile layouts in a real browser.
+- [x] Build semantic page structure and accessible form states.
+- [x] Add the original hero asset and responsive industrial visual system.
+- [x] Add native client validation, submit locking, and success/error panels.
+- [x] Check desktop and 390 px mobile layouts in a real browser.
 
 ### Task 3: n8n portfolio workflow
 
@@ -70,9 +70,9 @@
 - Adds: `request_id` persistence and Telegram `/start site_<request_id>` linking
 - Preserves: current form, admin approval, Calendar, reminder, report, and error flows
 
-- [ ] Write a structural workflow test.
-- [ ] Build V2.3 deterministically from the supplied V2.2 export.
-- [ ] Verify required nodes, connections, request identifier mapping, and absence of embedded secrets.
+- [x] Write a structural workflow test.
+- [x] Build V2.3 deterministically from the supplied V2.2 export.
+- [x] Verify required nodes, connections, request identifier mapping, and absence of embedded secrets.
 
 ### Task 4: Handoff documentation and final verification
 
@@ -81,8 +81,8 @@
 - Create: `docs/DEMO-SCRIPT.md`
 - Create: `package.json`
 
-- [ ] Document n8n import, Data Table column, Header Auth, `.env`, local run, and future Vercel deployment.
-- [ ] Document the complete five-minute portfolio demonstration.
-- [ ] Run all automated checks.
-- [ ] Test the form against a local mock webhook.
-- [ ] Inspect desktop and mobile screenshots and fix visible defects.
+- [x] Document n8n import, Data Table column, Header Auth, `.env`, local run, and future Vercel deployment.
+- [x] Document the complete five-minute portfolio demonstration.
+- [x] Run all automated checks.
+- [x] Test the form against a local mock webhook.
+- [x] Inspect desktop and mobile screenshots and fix visible defects.

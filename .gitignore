@@ -1,0 +1,5 @@
+.env
+.worktrees/
+node_modules/
+screenshots/
+output/
