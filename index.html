@@ -145,21 +145,19 @@
           </div>
           <label><span>Автомобиль</span><input name="car" autocomplete="off" maxlength="120" placeholder="Марка, модель и год" required></label>
           <label><span>Что нужно сделать</span><textarea name="problem" maxlength="700" rows="4" placeholder="Опишите проблему или нужные работы" required></textarea></label>
-          <fieldset class="choice-field" id="date-field">
-            <legend>Желаемая дата</legend>
-            <input name="desired_date" type="hidden">
-            <div class="choice-list date-choices" id="date-choices"></div>
-          </fieldset>
-          <fieldset class="choice-field" id="time-field">
-            <legend>Желаемое время</legend>
-            <input name="desired_time" type="hidden">
-            <div class="choice-list time-choices">
-              <button type="button" data-choice="time" data-value="10:00" aria-pressed="false">10:00</button>
-              <button type="button" data-choice="time" data-value="12:30" aria-pressed="false">12:30</button>
-              <button type="button" data-choice="time" data-value="15:00" aria-pressed="false">15:00</button>
-              <button type="button" data-choice="time" data-value="17:30" aria-pressed="false">17:30</button>
-            </div>
-          </fieldset>
+          <div class="field-row slot-row">
+            <label><span>Желаемая дата</span><input name="desired_date" type="date" required></label>
+            <fieldset class="choice-field" id="time-field">
+              <legend>Желаемое время</legend>
+              <input name="desired_time" type="time" required aria-label="Желаемое время вручную">
+              <div class="choice-list time-choices" aria-label="Быстрый выбор времени">
+                <button type="button" data-time="10:00" aria-pressed="false">10:00</button>
+                <button type="button" data-time="12:30" aria-pressed="false">12:30</button>
+                <button type="button" data-time="15:00" aria-pressed="false">15:00</button>
+                <button type="button" data-time="17:30" aria-pressed="false">17:30</button>
+              </div>
+            </fieldset>
+          </div>
           <p class="slot-note">Это ориентир — точный слот подтвердит администратор.</p>
           <label class="honeypot" aria-hidden="true">Ваш сайт<input name="website" tabindex="-1" autocomplete="off"></label>
           <button class="submit-button" type="submit"><span>Отправить заявку</span><b aria-hidden="true">↘</b></button>
