@@ -56,6 +56,22 @@ test('requires server-side n8n configuration', async () => {
   });
 });
 
+test('accepts a valid lead without a demo consent field', async () => {
+  const port = webhook.address().port;
+  const gateway = createLeadGateway({
+    webhookUrl: `http://127.0.0.1:${port}/lead`,
+    token: 'demo',
+    botUsername: 'VektorBot',
+    randomUUID: () => '123e4567-e89b-12d3-a456-426614174000',
+  });
+  const { consent, ...leadWithoutConsent } = validLead;
+
+  const result = await gateway.submit(leadWithoutConsent, '127.0.0.6');
+
+  assert.equal(result.ok, true);
+  assert.equal(received.body.request_id, '123e4567-e89b-12d3-a456-426614174000');
+});
+
 test('relays a normalized lead and returns an opaque Telegram link', async () => {
   received = undefined;
   const port = webhook.address().port;

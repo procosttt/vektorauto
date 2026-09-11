@@ -31,7 +31,7 @@
 - Test: `test/lead.test.mjs`
 
 **Interfaces:**
-- Consumes: JSON `{name, phone, car, problem, desired_date, desired_time, consent, website}`
+- Consumes: JSON `{name, phone, car, problem, desired_date, desired_time, website}`
 - Sends: normalized JSON with `request_id` to `N8N_WEBHOOK_URL`
 - Returns: `{ok, requestId, telegramUrl}` without secrets
 

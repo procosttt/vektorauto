@@ -9,7 +9,7 @@
   <title>Vektor Auto — сервис в правильном направлении</title>
   <link rel="preload" href="/assets/hero-car.png" as="image">
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script src="/app.js" type="module"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">К основному содержанию</a>
@@ -56,7 +56,10 @@
     </section>
 
     <div class="service-ticker" aria-label="Направления работ">
-      <div><span>ДИАГНОСТИКА</span><b>◆</b><span>ТЕХОБСЛУЖИВАНИЕ</span><b>◆</b><span>АВТОЭЛЕКТРИКА</span><b>◆</b><span>ХОДОВАЯ</span><b>◆</b><span>КУЗОВ</span><b>◆</b><span>ШИНОМОНТАЖ</span></div>
+      <div class="ticker-track">
+        <div class="ticker-group"><span>ДИАГНОСТИКА</span><b>◆</b><span>ТЕХОБСЛУЖИВАНИЕ</span><b>◆</b><span>АВТОЭЛЕКТРИКА</span><b>◆</b><span>ХОДОВАЯ</span><b>◆</b><span>КУЗОВ</span><b>◆</b><span>ШИНОМОНТАЖ</span><b>◆</b></div>
+        <div class="ticker-group" aria-hidden="true"><span>ДИАГНОСТИКА</span><b>◆</b><span>ТЕХОБСЛУЖИВАНИЕ</span><b>◆</b><span>АВТОЭЛЕКТРИКА</span><b>◆</b><span>ХОДОВАЯ</span><b>◆</b><span>КУЗОВ</span><b>◆</b><span>ШИНОМОНТАЖ</span><b>◆</b></div>
+      </div>
     </div>
 
     <section class="section services" id="services">
@@ -67,27 +70,34 @@
       </div>
 
       <div class="service-grid">
-        <article class="service-card service-card-featured reveal">
+        <a class="service-card service-card-featured reveal" href="#booking" aria-label="Записаться на ТО и диагностику">
           <div class="card-top"><span>01 / CORE</span><b>↘</b></div>
+          <div class="card-motif motif-scan" aria-hidden="true"><i></i></div>
           <h3>ТО И<br>ДИАГНОСТИКА</h3>
           <p>Комплексная проверка, регламентное обслуживание, масла и фильтры.</p>
-          <div class="scan-lines" aria-hidden="true"></div>
-        </article>
-        <article class="service-card reveal">
+          <ul class="service-tags" aria-hidden="true"><li>Сканер</li><li>Регламент</li><li>Жидкости</li></ul>
+        </a>
+        <a class="service-card reveal" href="#booking" aria-label="Записаться на ремонт ходовой и тормозов">
           <div class="card-top"><span>02 / CONTROL</span><b>↘</b></div>
+          <div class="card-motif motif-chassis" aria-hidden="true"><i></i><i></i></div>
           <h3>ХОДОВАЯ<br>И ТОРМОЗА</h3>
           <p>Подвеска, рулевое управление и тормозная система.</p>
-        </article>
-        <article class="service-card reveal">
+          <ul class="service-tags" aria-hidden="true"><li>Подвеска</li><li>Рулевое</li><li>Тормоза</li></ul>
+        </a>
+        <a class="service-card reveal" href="#booking" aria-label="Записаться на автоэлектрику">
           <div class="card-top"><span>03 / ELECTRIC</span><b>↘</b></div>
+          <div class="card-motif motif-electric" aria-hidden="true"><i></i></div>
           <h3>АВТО-<br>ЭЛЕКТРИКА</h3>
           <p>Аккумулятор, стартер, генератор и поиск неисправностей.</p>
-        </article>
-        <article class="service-card service-card-red reveal">
+          <ul class="service-tags" aria-hidden="true"><li>Питание</li><li>Запуск</li><li>Поиск цепи</li></ul>
+        </a>
+        <a class="service-card service-card-red reveal" href="#booking" aria-label="Записаться на кузовные работы и шиномонтаж">
           <div class="card-top"><span>04 / BODY</span><b>↘</b></div>
+          <div class="card-motif motif-body" aria-hidden="true"><i></i></div>
           <h3>КУЗОВ<br>И КОЛЁСА</h3>
           <p>Локальный ремонт, покраска, шиномонтаж и балансировка.</p>
-        </article>
+          <ul class="service-tags" aria-hidden="true"><li>Кузов</li><li>Покраска</li><li>Колёса</li></ul>
+        </a>
       </div>
     </section>
 
@@ -124,7 +134,10 @@
       </div>
 
       <div class="form-shell reveal">
-        <div class="form-meta"><span>ЗАЯВКА / 01</span><button type="button" id="fill-demo">Заполнить демо-данными</button></div>
+        <div class="form-meta">
+          <span>ЗАЯВКА / 01</span>
+          <div><small>Демо-режим · вымышленные данные</small><button type="button" id="fill-demo">Заполнить демо-данными</button></div>
+        </div>
         <form id="lead-form" novalidate>
           <div class="field-row">
             <label><span>Ваше имя</span><input name="name" autocomplete="name" maxlength="80" placeholder="Например, Алексей" required></label>
@@ -132,18 +145,28 @@
           </div>
           <label><span>Автомобиль</span><input name="car" autocomplete="off" maxlength="120" placeholder="Марка, модель и год" required></label>
           <label><span>Что нужно сделать</span><textarea name="problem" maxlength="700" rows="4" placeholder="Опишите проблему или нужные работы" required></textarea></label>
-          <div class="field-row">
-            <label><span>Желаемая дата</span><input name="desired_date" type="date" required></label>
-            <label><span>Желаемое время</span><input name="desired_time" type="time" required></label>
-          </div>
+          <fieldset class="choice-field" id="date-field">
+            <legend>Желаемая дата</legend>
+            <input name="desired_date" type="hidden">
+            <div class="choice-list date-choices" id="date-choices"></div>
+          </fieldset>
+          <fieldset class="choice-field" id="time-field">
+            <legend>Желаемое время</legend>
+            <input name="desired_time" type="hidden">
+            <div class="choice-list time-choices">
+              <button type="button" data-choice="time" data-value="10:00" aria-pressed="false">10:00</button>
+              <button type="button" data-choice="time" data-value="12:30" aria-pressed="false">12:30</button>
+              <button type="button" data-choice="time" data-value="15:00" aria-pressed="false">15:00</button>
+              <button type="button" data-choice="time" data-value="17:30" aria-pressed="false">17:30</button>
+            </div>
+          </fieldset>
+          <p class="slot-note">Это ориентир — точный слот подтвердит администратор.</p>
           <label class="honeypot" aria-hidden="true">Ваш сайт<input name="website" tabindex="-1" autocomplete="off"></label>
-          <label class="consent"><input name="consent" type="checkbox" required><span>Это демонстрационный проект. Я использую только вымышленные данные.</span></label>
-          <p class="demo-warning">Не вводите настоящие имя и телефон. Для проверки используйте демо-данные.</p>
           <button class="submit-button" type="submit"><span>Отправить заявку</span><b aria-hidden="true">↘</b></button>
           <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
         </form>
 
-        <div class="success-panel" id="success-panel" hidden>
+        <div class="success-panel" id="success-panel" tabindex="-1" hidden>
           <span class="success-mark" aria-hidden="true">✓</span>
           <p class="eyebrow"><span></span> Заявка передана</p>
           <h3>ПРОДОЛЖИМ<br>В TELEGRAM.</h3>
