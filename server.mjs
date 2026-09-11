@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, sep } from 'node:path';
-import { createLeadGateway, LeadError } from './lib/lead.mjs';
-import { contentType } from './lib/http.mjs';
+import { createLeadGateway, LeadError, parseJsonValue, telegramBotName } from './lib/lead.mjs';
+import { clientIp, contentType, isPublicPath } from './lib/http.mjs';
 
 async function loadEnv(file = '.env') {
   try {
@@ -24,40 +24,53 @@ const gateway = createLeadGateway({
   botUsername: process.env.TELEGRAM_BOT_USERNAME,
 });
 
+function send(res, status, body, headers = {}) {
+  res.writeHead(status, { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });
+  res.end(body);
+}
+
 function json(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(JSON.stringify(body));
+  send(res, status, JSON.stringify(body), { 'content-type': 'application/json; charset=utf-8' });
 }
 
 async function body(req) {
-  let raw = '';
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
-    raw += chunk;
-    if (Buffer.byteLength(raw) > 16_384) throw new LeadError('Слишком большой запрос.', 413);
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 16_384) throw new LeadError('Слишком большой запрос.', 413);
+    chunks.push(buffer);
   }
-  try { return JSON.parse(raw); } catch { throw new LeadError('Некорректный запрос.'); }
+  return parseJsonValue(Buffer.concat(chunks));
 }
 
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'POST' && url.pathname === '/api/lead') {
-      const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown').split(',')[0].trim();
-      return json(res, 200, await gateway.submit(await body(req), ip));
+      return json(res, 200, await gateway.submit(await body(req), clientIp(req.headers, req.socket.remoteAddress)));
     }
     if (req.method === 'GET' && url.pathname === '/telegram') {
-      const bot = String(process.env.TELEGRAM_BOT_USERNAME ?? '').replace(/^@/, '');
-      if (!bot) return json(res, 503, { ok: false, message: 'Telegram ещё не подключён.' });
-      res.writeHead(302, { location: `https://t.me/${bot}` });
+      const bot = telegramBotName(process.env.TELEGRAM_BOT_USERNAME);
+      if (!bot) {
+        return send(res, 503, '<!doctype html><meta charset="utf-8"><title>Telegram</title><p>Telegram ещё не подключён.</p><p><a href="/">На главную</a></p>', { 'content-type': 'text/html; charset=utf-8' });
+      }
+      res.writeHead(302, { location: `https://t.me/${bot}`, 'cache-control': 'no-store' });
       return res.end();
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { ok: false, message: 'Метод не поддерживается.' });
 
-    const pathname = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+    let pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+    try { pathname = decodeURIComponent(pathname); } catch { return json(res, 400, { ok: false, message: 'Некорректный запрос.' }); }
+    if (!isPublicPath(pathname)) return json(res, 404, { ok: false, message: 'Не найдено.' });
+
     const file = resolve(root, `.${pathname}`);
     if (!file.startsWith(`${root}${sep}`)) return json(res, 404, { ok: false, message: 'Не найдено.' });
     const content = await readFile(file);
-    res.writeHead(200, { 'content-type': contentType(file) });
+    const type = contentType(file);
+    const cache = type.startsWith('image/') ? 'public, max-age=86400' : 'no-store';
+    res.writeHead(200, { 'content-type': type, 'cache-control': cache, 'x-content-type-options': 'nosniff' });
     if (req.method === 'HEAD') return res.end();
     res.end(content);
   } catch (error) {
