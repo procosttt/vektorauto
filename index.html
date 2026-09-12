@@ -77,14 +77,14 @@
           <p>Комплексная проверка, регламентное обслуживание, масла и фильтры.</p>
           <ul class="service-tags" aria-hidden="true"><li>Сканер</li><li>Регламент</li><li>Жидкости</li></ul>
         </a>
-        <a class="service-card reveal" href="#booking" aria-label="Записаться на ремонт ходовой и тормозов">
+        <a class="service-card service-card-paper reveal" href="#booking" aria-label="Записаться на ремонт ходовой и тормозов">
           <div class="card-top"><span>02 / CONTROL</span><b>↘</b></div>
           <div class="card-motif motif-chassis" aria-hidden="true"><i></i><i></i></div>
           <h3>ХОДОВАЯ<br>И ТОРМОЗА</h3>
           <p>Подвеска, рулевое управление и тормозная система.</p>
           <ul class="service-tags" aria-hidden="true"><li>Подвеска</li><li>Рулевое</li><li>Тормоза</li></ul>
         </a>
-        <a class="service-card reveal" href="#booking" aria-label="Записаться на автоэлектрику">
+        <a class="service-card service-card-sand reveal" href="#booking" aria-label="Записаться на автоэлектрику">
           <div class="card-top"><span>03 / ELECTRIC</span><b>↘</b></div>
           <div class="card-motif motif-electric" aria-hidden="true"><i></i></div>
           <h3>АВТО-<br>ЭЛЕКТРИКА</h3>
@@ -103,17 +103,26 @@
 
     <section class="process" id="process">
       <div class="process-header reveal">
-        <p class="eyebrow eyebrow-light"><span></span> Чёткий процесс</p>
+        <p class="eyebrow eyebrow-light"><span></span> Как проходит запись</p>
         <h2>ЗАПИСЬ БЕЗ<br><em>ХОЛОСТОГО ХОДА.</em></h2>
       </div>
-      <ol class="steps">
-        <li class="reveal"><b>01</b><div><h3>Оставьте заявку</h3><p>На сайте или в Telegram. Анна уточнит главное и ничего не потеряет.</p></div></li>
-        <li class="reveal"><b>02</b><div><h3>Проверим время</h3><p>Система сверит календарь, а администратор подтвердит реальный слот.</p></div></li>
-        <li class="reveal"><b>03</b><div><h3>Получите подтверждение</h3><p>Привяжите Telegram после формы — там придут решение и напоминание.</p></div></li>
+      <ol class="timeline">
+        <li class="reveal">
+          <div class="timeline-node"><b>01</b><i aria-hidden="true"></i></div>
+          <h3>Оставьте заявку</h3>
+          <p>Напишите имя, автомобиль и что нужно сделать — на сайте или в Telegram.</p>
+        </li>
+        <li class="reveal">
+          <div class="timeline-node"><b>02</b><i aria-hidden="true"></i></div>
+          <h3>Подтверждаем время</h3>
+          <p>Администратор проверит занятость и согласует удобный час визита.</p>
+        </li>
+        <li class="reveal">
+          <div class="timeline-node"><b>03</b><i aria-hidden="true"></i></div>
+          <h3>Приезжайте в сервис</h3>
+          <p>После подтверждения приезжайте в выбранный день. Мы напомним заранее.</p>
+        </li>
       </ol>
-      <div class="automation-rail reveal" aria-label="Автоматизированный путь заявки">
-        <span>САЙТ</span><i>→</i><span>АННА</span><i>→</i><span>АДМИНИСТРАТОР</span><i>→</i><span>КАЛЕНДАРЬ</span><i>→</i><span>КЛИЕНТ</span>
-      </div>
     </section>
 
     <section class="booking" id="booking">
@@ -133,32 +142,39 @@
         </a>
       </div>
 
-      <div class="form-shell reveal">
-        <div class="form-meta">
-          <span>ЗАЯВКА / 01</span>
-          <div><small>Демо-режим · вымышленные данные</small><button type="button" id="fill-demo">Заполнить демо-данными</button></div>
+      <div class="form-shell reveal" id="form-shell">
+        <div class="form-head" id="form-head">
+          <span class="form-stamp" aria-hidden="true">01</span>
+          <div class="form-head-copy">
+            <strong>Заявка на запись</strong>
+            <small>Демо-режим · вымышленные данные</small>
+          </div>
+          <button type="button" id="fill-demo">Заполнить демо-данными</button>
         </div>
         <form id="lead-form" novalidate>
-          <div class="field-row">
-            <label><span>Ваше имя</span><input name="name" autocomplete="name" maxlength="80" placeholder="Например, Алексей" required></label>
-            <label><span>Телефон</span><input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="+7 999 000-00-00" required></label>
-          </div>
-          <label><span>Автомобиль</span><input name="car" autocomplete="off" maxlength="120" placeholder="Марка, модель и год" required></label>
-          <label><span>Что нужно сделать</span><textarea name="problem" maxlength="700" rows="4" placeholder="Опишите проблему или нужные работы" required></textarea></label>
-          <div class="field-row slot-row">
-            <label><span>Желаемая дата</span><input name="desired_date" type="date" required></label>
-            <fieldset class="choice-field" id="time-field">
-              <legend>Желаемое время</legend>
-              <input name="desired_time" type="time" required aria-label="Желаемое время вручную">
-              <div class="choice-list time-choices" aria-label="Быстрый выбор времени">
-                <button type="button" data-time="10:00" aria-pressed="false">10:00</button>
-                <button type="button" data-time="12:30" aria-pressed="false">12:30</button>
-                <button type="button" data-time="15:00" aria-pressed="false">15:00</button>
-                <button type="button" data-time="17:30" aria-pressed="false">17:30</button>
-              </div>
-            </fieldset>
-          </div>
-          <p class="slot-note">Это ориентир — точный слот подтвердит администратор.</p>
+          <fieldset class="form-block">
+            <legend>Контакты</legend>
+            <div class="field-row">
+              <label><span>Ваше имя</span><input name="name" autocomplete="name" maxlength="80" placeholder="Например, Алексей" required></label>
+              <label><span>Телефон</span><input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="+7 999 000-00-00" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="form-block">
+            <legend>Автомобиль</legend>
+            <label><span>Автомобиль</span><input name="car" autocomplete="off" maxlength="120" placeholder="Марка, модель и год" required></label>
+          </fieldset>
+          <fieldset class="form-block">
+            <legend>Работы</legend>
+            <label><span>Что нужно сделать</span><textarea name="problem" maxlength="700" rows="4" placeholder="Опишите проблему или нужные работы" required></textarea></label>
+          </fieldset>
+          <fieldset class="form-block">
+            <legend>Желаемое время</legend>
+            <div class="field-row slot-row">
+              <label><span>Желаемая дата</span><input name="desired_date" type="date" required></label>
+              <label><span>Желаемое время</span><input name="desired_time" type="time" required></label>
+            </div>
+            <p class="slot-note">Администратор проверит календарь и подтвердит точное время.</p>
+          </fieldset>
           <label class="honeypot" aria-hidden="true">Ваш сайт<input name="website" tabindex="-1" autocomplete="off" data-lpignore="true" data-1p-ignore></label>
           <button class="submit-button" type="submit"><span>Отправить заявку</span><b aria-hidden="true">↘</b></button>
           <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
@@ -180,8 +196,12 @@
       <svg viewBox="0 0 44 44" aria-hidden="true"><path d="M4 7h14l4 8 4-8h14L22 39 4 7Zm11 7 7 13 7-13h-5l-2 5-2-5h-5Z"/></svg>
       <span>VEKTOR<small>AUTO SERVICE</small></span>
     </a>
-    <p>Портфельный демонстрационный проект.<br>Не является сайтом действующего автосервиса.</p>
-    <p class="footer-tech">SITE × N8N × TELEGRAM × CALENDAR<br><span>Собрано как реальный продукт</span></p>
+    <p class="footer-note">Демонстрационный проект системы онлайн-записи</p>
+    <nav class="footer-links" aria-label="Действия в подвале">
+      <a href="#booking">Записаться онлайн</a>
+      <a href="/telegram" target="_blank" rel="noopener">Telegram</a>
+    </nav>
+    <p class="footer-legal">Не является сайтом действующего автосервиса.</p>
   </footer>
 </body>
 </html>
