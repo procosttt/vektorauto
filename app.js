@@ -5,10 +5,9 @@ const status = document.querySelector('#form-status');
 const submit = form.querySelector('button[type="submit"]');
 const success = document.querySelector('#success-panel');
 const telegram = document.querySelector('#success-telegram');
-const formHead = document.querySelector('#form-head');
-const formShell = document.querySelector('#form-shell');
 const dateInput = form.elements.desired_date;
 const timeInput = form.elements.desired_time;
+const timeButtons = [...form.querySelectorAll('[data-time]')];
 
 const localDate = (date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 const shiftDays = (days) => {
@@ -23,30 +22,13 @@ const refreshDateBounds = () => {
 refreshDateBounds();
 dateInput.addEventListener('focus', refreshDateBounds);
 
-const fieldControls = () => [...form.elements].filter((element) => (
-  (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && element.name !== 'website'
-));
-
-const clearFieldState = (element) => {
-  element.classList.remove('is-invalid');
-  element.removeAttribute('aria-invalid');
-};
-
-const markInvalidFields = () => {
-  fieldControls().forEach((element) => {
-    const invalid = !element.checkValidity();
-    element.classList.toggle('is-invalid', invalid);
-    if (invalid) element.setAttribute('aria-invalid', 'true');
-    else element.removeAttribute('aria-invalid');
-  });
-};
-
-form.addEventListener('input', (event) => {
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) clearFieldState(event.target);
-});
-form.addEventListener('change', (event) => {
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) clearFieldState(event.target);
-});
+const syncTimeButtons = () => timeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.time === timeInput.value)));
+timeButtons.forEach((button) => button.addEventListener('click', () => {
+  timeInput.value = button.dataset.time;
+  syncTimeButtons();
+}));
+timeInput.addEventListener('input', syncTimeButtons);
+timeInput.addEventListener('change', syncTimeButtons);
 
 document.querySelector('#fill-demo').addEventListener('click', () => {
   refreshDateBounds();
@@ -56,22 +38,16 @@ document.querySelector('#fill-demo').addEventListener('click', () => {
   Object.assign(form.elements.problem, { value: 'Нужна диагностика ходовой, появился стук спереди' });
   dateInput.value = localDate(shiftDays(1));
   timeInput.value = '15:00';
-  fieldControls().forEach(clearFieldState);
-  status.className = 'form-status form-status-ok';
+  syncTimeButtons();
+  status.className = 'form-status';
   status.textContent = 'Демо-данные заполнены. Можно отправлять.';
 });
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   status.className = 'form-status';
-  if (!form.reportValidity()) {
-    markInvalidFields();
-    status.className = 'form-status form-status-error';
-    status.textContent = 'Проверьте выделенные поля.';
-    return;
-  }
+  if (!form.reportValidity()) return;
   if (!dateInput.value || !timeInput.value) {
-    markInvalidFields();
     status.className = 'form-status form-status-error';
     status.textContent = 'Выберите желаемые дату и время.';
     (!dateInput.value ? dateInput : timeInput).focus();
@@ -94,8 +70,7 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(result.message || 'Не удалось отправить заявку.');
     telegram.href = result.telegramUrl || '/telegram';
     form.hidden = true;
-    if (formHead) formHead.hidden = true;
-    if (formShell) formShell.classList.add('is-success');
+    document.querySelector('.form-meta').hidden = true;
     success.hidden = false;
     success.focus();
   } catch (error) {
